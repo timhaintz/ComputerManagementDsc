@@ -1,0 +1,49 @@
+name: CodeQL
+
+on:
+  push:
+    branches: [dev]
+  pull_request:
+    branches: [dev]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  analyze-csharp:
+    name: Analyze C# time zone helper
+    runs-on: windows-2022
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - name: Check out source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4
+        with:
+          languages: csharp
+          build-mode: manual
+
+      # This standalone source is loaded by Add-Type at runtime. PowerShell
+      # itself is not a supported CodeQL language, so coverage is limited to it.
+      - name: Compile the C# time zone helper
+        shell: powershell
+        run: |
+          $compiler = Join-Path $env:WINDIR 'Microsoft.NET\Framework64\v4.0.30319\csc.exe'
+          $source = Join-Path $env:GITHUB_WORKSPACE 'Modules\ComputerManagementDsc\Modules\ComputerManagementDsc.Common\SetTimeZone.cs'
+          $output = Join-Path $env:RUNNER_TEMP 'ComputerManagementDsc.TimeZone.dll'
+          & $compiler /nologo /target:library "/out:$output" $source
+          if ($LASTEXITCODE -ne 0) {
+            throw "C# compilation failed with exit code $LASTEXITCODE."
+          }
+
+      - name: Analyze C#
+        uses: github/codeql-action/analyze@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4
+        with:
+          category: /language:csharp
